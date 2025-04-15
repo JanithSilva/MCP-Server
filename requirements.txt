@@ -1,0 +1,7 @@
+langchain-mcp-adapters
+mcp[cli]
+langchain_openai
+pinecone
+langchain
+langchain_neo4j
+office365-rest-python-client

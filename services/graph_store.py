@@ -1,3 +1,4 @@
+import json
 from langchain_neo4j import Neo4jGraph
 from langchain_openai import AzureOpenAIEmbeddings
 from settings import load_config
@@ -67,32 +68,32 @@ class GraphStoreService:
             chunk_node = record["node"]
             
             entity_query = """
-            MATCH (chunk:Document {id: $chunk_id})
-            OPTIONAL MATCH (chunk)-[r1]-(entity)
-            WHERE NOT entity:Document  // Exclude other document chunks
-            // Now find all relationships for these entities
-            OPTIONAL MATCH (entity)-[r2]-(related_node)
-            WHERE NOT related_node:Document  // Exclude document nodes
-            RETURN 
-                entity, 
-                labels(entity) as entity_labels, 
-                collect(DISTINCT {
-                    relationship: r2,
-                    type: type(r2),
-                    direction: CASE WHEN startNode(r2) = entity THEN 'FORWARD' ELSE 'BACKWARD' END,
-                    related_node: related_node,
-                    related_node_labels: labels(related_node)
-                }) as entity_relationships
-            """
+                MATCH (chunk:Document {id: $chunk_id})
+                OPTIONAL MATCH (chunk)-[r1]-(entity)
+                WHERE NOT entity:Document  // Exclude other document chunks
+                // Now find all relationships for these entities
+                OPTIONAL MATCH (entity)-[r2]-(related_node)
+                WHERE NOT related_node:Document AND id(entity) < id(related_node)  // This ensures each relationship is only returned once
+                RETURN 
+                    entity, 
+                    labels(entity) as entity_labels, 
+                    collect(DISTINCT {
+                        relationship: r2,
+                        type: type(r2),
+                        direction: CASE WHEN startNode(r2) = entity THEN 'FORWARD' ELSE 'BACKWARD' END,
+                        related_node: related_node,
+                        related_node_labels: labels(related_node)
+                    }) as entity_relationships
+                """
             entities = self.neo4j_graph.query(
                 entity_query,
                 params={"chunk_id": chunk_node["id"]}
             )
             results.append(entities)
    
-        formatted_output = [] 
-
-        #Process each entity to build a structured output
+        
+        relationships = set()  
+        
         for entity_data in results:
             if not entity_data:
                 continue
@@ -100,32 +101,27 @@ class GraphStoreService:
             for entity_entry in entity_data:
                 if not isinstance(entity_entry, dict):
                     continue
+                    
                 entity = entity_entry.get('entity', {}).get('id', 'Unknown')
-                labels = ', '.join(entity_entry.get('entity_labels', []))
+                rels = entity_entry.get('entity_relationships', [])
                 
-                #Start building the entity description
-                entity_desc = f"Entity: {entity} (Labels: {labels})\n"
-                
-                #Process relationships
-                relationships = entity_entry.get('entity_relationships', [])
-                if relationships:
-                    entity_desc += "Relationships:\n"
-                    for rel in relationships:
-                        if rel["relationship"] is not None:
-                            rel_type = rel.get('type', '')
-                            direction = rel.get('direction', '')
-                            related_node = rel.get('related_node', {}).get('id', 'Unknown')
-                            related_labels = ', '.join(rel.get('related_node_labels', []))
-                            if direction == 'FORWARD':
-                                rel_desc = f"  - {entity} -> {rel_type} -> {related_node} (Labels: {related_labels})"
-                            else: 
-                                rel_desc = f"  - {related_node} -> {rel_type} -> {entity} (Labels: {related_labels})"
-                            
-                            entity_desc += rel_desc + "\n"
-                        else:
-                            continue
-                
-                formatted_output.append(entity_desc)
+                for rel in rels:
+                    if not rel["relationship"]:
+                        continue
+                        
+                    related_node = rel.get('related_node', {}).get('id', 'Unknown')
+                    rel_type = rel.get('type', 'UNKNOWN')
+                    
+                    # Create normalized relationship representation (direction-agnostic)
+                    sorted_nodes = sorted([entity, related_node])
+                    relationship_key = f"{sorted_nodes[0]}||{rel_type}||{sorted_nodes[1]}"
+                    
+                    relationships.add(relationship_key)
         
-        #Join all entity descriptions with separators
-        return "\n\n".join(formatted_output)
+        # Convert to clean output format
+        formatted_rels = []
+        for rel in relationships:
+            source, rel_type, target = rel.split("||")
+            formatted_rels.append(f"{source} - {rel_type} -> {target}")
+        
+        return "\n".join(formatted_rels) if formatted_rels else "No relationships found"

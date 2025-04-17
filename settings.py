@@ -6,20 +6,10 @@ def load_config() -> Dict[str, Any]:
     load_dotenv()
     return {
         "sharepoint": {
-            "url": os.getenv("SHAREPOINT_URL"),
+            "url": os.getenv("SHAREPOINT_SITE_URL"),
             "username": os.getenv("SHAREPOINT_USERNAME"),
             "password": os.getenv("SHAREPOINT_PASSWORD"),
             "library_name": os.getenv("SHAREPOINT_LIBRARY_NAME"),
-        },
-        "azure_doc_intel": {
-            "key": os.getenv("AZURE_DOCUMENT_INTEL_KEY"),
-            "endpoint": os.getenv("AZURE_DOCUMENT_INTEL_ENDPOINT")
-        },
-        "pinecone": {
-            "pinecone_api_key": os.getenv("PINECONE_API_KEY"),
-            "environment": os.getenv("PINECONE_ENVIRONMENT"),
-            "index_name": "sharepoint-docs"
-
         },
         "neo4j": {
             "uri": os.getenv("NEO4J_URI"),
@@ -31,8 +21,9 @@ def load_config() -> Dict[str, Any]:
             "api_key": os.getenv("EMBEDDING_MODEL_KEY"),
             "api_version": os.getenv("EMBEDDING_MODEL_API_VERSION"),
             "deployment": os.getenv("EMBEDDING_MODEL_DEPLOYMENT_NAME"),
-            "model": os.getenv("EMBEDDING_MODEL_NAME"),
-            "chunk_size": os.getenv("EMBEDDING_MODEL_CHUNK_SIZE"),
+            "chunk_size": int(os.getenv("EMBEDDING_MODEL_CHUNK_SIZE")),
+            "dimension": int(os.getenv("EMBEDDING_MODEL_DIMENSION")),
+            "chunk_overlap": int(os.getenv("EMBEDDING_MODEL_CHUNK_OVERLAP")),
         },
         "openai-llm": {
             "api_version": os.getenv("LLM_API_VERSION"),
